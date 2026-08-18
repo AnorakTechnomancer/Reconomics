@@ -1,8 +1,16 @@
 from ai_pentest.models import ScanResult
 from ai_pentest.orchestrator import ScanOrchestrator
+from ai_pentest.scanners.base import Scanner
+from ai_pentest.targets import TargetType
 
 
-class FakeScanner:
+class FakeScanner(Scanner):
+    supported_target_types = {
+        TargetType.IP,
+        TargetType.NETWORK,
+        TargetType.DOMAIN,
+    }
+
     def scan(self, target: str) -> ScanResult:
         return ScanResult(
             scanner="fake",
@@ -21,10 +29,37 @@ def test_orchestrator_builds_scan_session():
 
     assert session.target == "192.0.2.10"
     assert session.completed_at is not None
-
     assert len(session.scanner_results) == 1
 
     result = session.scanner_results[0]
 
     assert result.scanner == "fake"
     assert result.target == "192.0.2.10"
+
+class FailingScanner(Scanner):
+    supported_target_types = {
+        TargetType.IP,
+        TargetType.NETWORK,
+        TargetType.DOMAIN,
+    }
+
+    def scan(self, target: str) -> ScanResult:
+        raise RuntimeError("simulated scanner failure")
+    
+def test_orchestrator_records_scanner_error():
+    orchestrator = ScanOrchestrator()
+
+    orchestrator.scanners = [
+        FailingScanner(),
+        FakeScanner(),
+    ]
+
+    session = orchestrator.run("192.0.2.10")
+
+    assert len(session.errors) == 1
+    assert session.errors[0].stage == "initial_scan"
+    assert session.errors[0].target == "192.0.2.10"
+    assert "simulated scanner failure" in session.errors[0].message
+
+    assert len(session.scanner_results) == 1
+    assert session.scanner_results[0].scanner == "fake"
