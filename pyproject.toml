@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-pentest"
+version = "0.1.0"
+description = "Authorized reconnaissance orchestration with normalized findings and pluggable AI analysis."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.8,<3"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+ai-pentest = "ai_pentest.cli:main"
