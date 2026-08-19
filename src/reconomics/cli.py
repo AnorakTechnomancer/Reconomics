@@ -2,7 +2,7 @@ import argparse
 
 from reconomics.logging_config import configure_logging
 from reconomics.orchestrator import ScanOrchestrator
-from reconomics.reporting import render_json, write_json
+from reconomics.reporting import render_console, render_json, write_json
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,7 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         help="Write normalized scan results to a JSON file."
     )
-
+    scan_parser.add_argument(
+        "--format",
+        choices=["console", "json"],
+        default="console",
+        help="Output format.",
+    )
 
 
     return parser
@@ -65,11 +70,17 @@ def main() -> int:
             print(f"[-] Scan failed: {exc}")
             return 1
 
-        if args.output:
-            write_json(session, args.output)
-            print(f"[+] Results written to {args.output}")
+        if args.format == "json":
+            json_output = render_json(session)
+
+            if args.output:
+                write_json(session, args.output)
+                print(f"[+] Results written to {args.output}")
+            else:
+                print(json_output)
+
         else:
-            print(render_json(session))
+            render_console(session)
 
         return 0
     return 1
