@@ -1,6 +1,6 @@
 import socket
 
-from ai_pentest.models import Asset, AssetType
+from reconomics.models import Asset, AssetType
 
 
 def resolve_domain(domain: str) -> list[Asset]:

@@ -1,7 +1,7 @@
-from ai_pentest.models import ScanResult
-from ai_pentest.orchestrator import ScanOrchestrator
-from ai_pentest.scanners.base import Scanner
-from ai_pentest.targets import TargetType
+from reconomics.models import ScanResult
+from reconomics.orchestrator import ScanOrchestrator
+from reconomics.scanners.base import Scanner
+from reconomics.targets import TargetType
 
 
 class FakeScanner(Scanner):

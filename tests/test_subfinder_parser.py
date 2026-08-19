@@ -1,4 +1,4 @@
-from ai_pentest.scanners.subfinder import SubfinderScanner
+from reconomics.scanners.subfinder import SubfinderScanner
 
 
 SAMPLE_OUTPUT = """

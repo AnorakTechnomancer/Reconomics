@@ -1,19 +1,19 @@
 import argparse
 
-from ai_pentest.orchestrator import ScanOrchestrator
-from ai_pentest.reporting import render_json, write_json
-from ai_pentest.logging_config import configure_logging
+from reconomics.orchestrator import ScanOrchestrator
+from reconomics.reporting import render_json, write_json
+from reconomics.logging_config import configure_logging
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="ai-pentest",
+        prog="reconomics",
         description="Authorized reconnaissance and analysis orchestration."
     )
 
     parser.add_argument(
         "--version",
         action="version",
-        version="ai-pentest 0.1.0"
+        version="reconomics 0.1.0"
     )
     parser.add_argument(
         "-v",

@@ -1,4 +1,4 @@
-from ai_pentest.targets import TargetType, classify_target
+from reconomics.targets import TargetType, classify_target
 
 
 def test_classifies_ipv4_address():
