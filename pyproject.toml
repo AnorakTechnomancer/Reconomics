@@ -14,7 +14,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8,<9"
+    "pytest>=8,<9",
+    "ruff",
 ]
 
 [tool.setuptools.packages.find]
@@ -22,3 +23,15 @@ where = ["src"]
 
 [project.scripts]
 reconomics = "reconomics.cli:main"
+
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+]

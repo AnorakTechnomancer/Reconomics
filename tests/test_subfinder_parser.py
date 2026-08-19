@@ -1,6 +1,5 @@
 from reconomics.scanners.subfinder import SubfinderScanner
 
-
 SAMPLE_OUTPUT = """
 {"host":"www.example.com","source":"crtsh"}
 {"host":"api.example.com","source":"hackertarget"}

@@ -6,6 +6,7 @@ from reconomics.models import HostFinding, ScanResult, ServiceFinding
 from reconomics.scanners.base import Scanner
 from reconomics.targets import TargetType
 
+
 class NmapError(RuntimeError):
     pass
 

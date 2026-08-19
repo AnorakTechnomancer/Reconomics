@@ -1,12 +1,11 @@
+import logging
 from datetime import datetime, timezone
 
-from reconomics.models import Asset, AssetType, ScanSession
+from reconomics.models import Asset, AssetType, ScanError, ScanSession
 from reconomics.resolver import resolve_domain
 from reconomics.scanners.nmap import NmapScanner
 from reconomics.scanners.subfinder import SubfinderScanner
 from reconomics.targets import classify_target
-from reconomics.models import Asset, AssetType, ScanError, ScanSession
-import logging
 
 logger = logging.getLogger(__name__)
 

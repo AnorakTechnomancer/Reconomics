@@ -6,6 +6,7 @@ from reconomics.models import DomainFinding, ScanResult
 from reconomics.scanners.base import Scanner
 from reconomics.targets import TargetType
 
+
 class SubfinderError(RuntimeError):
     pass
 

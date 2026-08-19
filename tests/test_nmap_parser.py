@@ -1,6 +1,5 @@
 from reconomics.scanners.nmap import NmapScanner
 
-
 SAMPLE_XML = """<?xml version="1.0"?>
 <nmaprun>
   <host>

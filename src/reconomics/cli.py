@@ -1,8 +1,9 @@
 import argparse
 
+from reconomics.logging_config import configure_logging
 from reconomics.orchestrator import ScanOrchestrator
 from reconomics.reporting import render_json, write_json
-from reconomics.logging_config import configure_logging
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
