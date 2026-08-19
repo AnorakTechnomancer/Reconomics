@@ -26,7 +26,21 @@ class DomainFinding(BaseModel):
 class AssetType(str, Enum):
     DOMAIN = "domain"
     IP = "ip"
+    SERVICE = "service"
+    WEB_ENDPOINT = "web_endpoint"
 
+class RelationshipType(str, Enum):
+    RESOLVES_TO = "resolves_to"
+    EXPOSES = "exposes"
+    SERVES = "serves"
+    USES = "uses"
+    HAS_FINDING = "has_finding"
+
+class AssetRelationship(BaseModel):
+    source: str
+    target: str
+    relationship_type: RelationshipType
+    discovered_by: str
 
 class Asset(BaseModel):
     value: str
@@ -34,6 +48,17 @@ class Asset(BaseModel):
     discovered_by: str
     in_scope: bool = True
     related_domains: list[str] = Field(default_factory=list)
+
+    port: int | None = None
+    protocol: str | None = None
+    service: str | None = None
+    product: str | None = None
+    version: str | None = None
+    
+    url: str | None = None
+    status_code: int | None = None
+    title: str | None = None
+    technologies: list[str] = Field(default_factory=list)
 
 class ScanResult(BaseModel):
     scanner: str
@@ -58,6 +83,7 @@ class ScanSession(BaseModel):
     )
     completed_at: datetime | None = None
     assets: list[Asset] = Field(default_factory=list)
+    relationships: list[AssetRelationship] = Field(default_factory=list)
     scanner_results: list[ScanResult] = Field(default_factory=list)
     errors: list[ScanError] = Field(default_factory=list)
 

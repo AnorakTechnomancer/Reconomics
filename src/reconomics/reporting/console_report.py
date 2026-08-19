@@ -46,6 +46,29 @@ def render_console(session: ScanSession) -> None:
     services.add_column("Service")
     services.add_column("Product")
 
+    web_endpoints = [
+        asset
+        for asset in session.assets
+        if asset.asset_type == AssetType.WEB_ENDPOINT
+    ]
+
+    if web_endpoints:
+        endpoints = Table(title="Web Endpoints")
+        endpoints.add_column("URL")
+        endpoints.add_column("Status", justify="right")
+        endpoints.add_column("Title")
+        endpoints.add_column("Technologies")
+
+        for asset in web_endpoints:
+            endpoints.add_row(
+                asset.url or asset.value,
+                str(asset.status_code) if asset.status_code is not None else "-",
+                asset.title or "-",
+                ", ".join(asset.technologies) if asset.technologies else "-",
+            )
+
+        console.print(endpoints)
+
     for result in session.scanner_results:
         for host in result.hosts:
             for service in host.services:
