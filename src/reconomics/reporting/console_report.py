@@ -29,6 +29,12 @@ def render_console(session: ScanSession) -> None:
         for host in result.hosts
     )
 
+    web_endpoint_count = sum(
+        1
+        for asset in session.assets
+        if asset.asset_type == AssetType.WEB_ENDPOINT
+    )
+
     summary = Table(title="Scan Summary")
     summary.add_column("Metric")
     summary.add_column("Count", justify="right")
@@ -45,6 +51,28 @@ def render_console(session: ScanSession) -> None:
     services.add_column("Port")
     services.add_column("Service")
     services.add_column("Product")
+
+    summary.add_row("Web Endpoints", str(web_endpoint_count))
+
+    for result in session.scanner_results:
+        for host in result.hosts:
+            for service in host.services:
+                services.add_row(
+                    host.hostname or host.address,
+                    f"{service.port}/{service.protocol}",
+                    service.service or "-",
+                    " ".join(
+                        value
+                        for value in [
+                            service.product,
+                            service.version,
+                        ]
+                        if value
+                    ) or "-",
+                )
+
+    if services.row_count:
+        console.print(services)
 
     web_endpoints = [
         asset
@@ -69,25 +97,49 @@ def render_console(session: ScanSession) -> None:
 
         console.print(endpoints)
 
-    for result in session.scanner_results:
-        for host in result.hosts:
-            for service in host.services:
-                services.add_row(
-                    host.hostname or host.address,
-                    f"{service.port}/{service.protocol}",
-                    service.service or "-",
-                    " ".join(
-                        value
-                        for value in [
-                            service.product,
-                            service.version,
-                        ]
-                        if value
-                    ) or "-",
-                )
+    if session.wordpress_findings:
+        wordpress = Table(title="WordPress Findings")
+        wordpress.add_column("URL")
+        wordpress.add_column("Version")
+        wordpress.add_column("Plugins")
+        wordpress.add_column("Themes")
+        wordpress.add_column("Vulnerabilities")
 
-    if services.row_count:
-        console.print(services)
+        for finding in session.wordpress_findings:
+            wordpress.add_row(
+                finding.url,
+                finding.version or "-",
+                ", ".join(finding.plugins) if finding.plugins else "-",
+                ", ".join(finding.themes) if finding.themes else "-",
+                str(len(finding.vulnerabilities)),
+            )
+
+        console.print(wordpress)
+
+    vulnerability_rows = [
+        (finding.url, vulnerability)
+        for finding in session.wordpress_findings
+        for vulnerability in finding.vulnerabilities
+    ]
+
+    if vulnerability_rows:
+        vulnerabilities = Table(title="WordPress Vulnerabilities")
+        vulnerabilities.add_column("URL")
+        vulnerabilities.add_column("Title")
+        vulnerabilities.add_column("Fixed In")
+        vulnerabilities.add_column("References")
+
+        for url, vulnerability in vulnerability_rows:
+            vulnerabilities.add_row(
+                url,
+                vulnerability.title,
+                vulnerability.fixed_in or "-",
+                ", ".join(vulnerability.references)
+                if vulnerability.references
+                else "-",
+            )
+
+        console.print(vulnerabilities)
 
     if session.errors:
         errors = Table(title="Errors")

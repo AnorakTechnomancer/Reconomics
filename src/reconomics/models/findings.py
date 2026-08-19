@@ -54,7 +54,7 @@ class Asset(BaseModel):
     service: str | None = None
     product: str | None = None
     version: str | None = None
-    
+
     url: str | None = None
     status_code: int | None = None
     title: str | None = None
@@ -76,6 +76,19 @@ class ScanError(BaseModel):
     scanner: str | None = None
     message: str
 
+class VulnerabilityFinding(BaseModel):
+    title: str
+    severity: str | None = None
+    fixed_in: str | None = None
+    references: list[str] = Field(default_factory=list)
+
+class WordPressFinding(BaseModel):
+    url: str
+    version: str | None = None
+    plugins: list[str] = Field(default_factory=list)
+    themes: list[str] = Field(default_factory=list)
+    vulnerabilities: list[VulnerabilityFinding] = Field(default_factory=list)
+
 class ScanSession(BaseModel):
     target: str
     started_at: datetime = Field(
@@ -86,4 +99,4 @@ class ScanSession(BaseModel):
     relationships: list[AssetRelationship] = Field(default_factory=list)
     scanner_results: list[ScanResult] = Field(default_factory=list)
     errors: list[ScanError] = Field(default_factory=list)
-
+    wordpress_findings: list[WordPressFinding] = Field(default_factory=list)

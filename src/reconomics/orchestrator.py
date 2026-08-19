@@ -13,7 +13,9 @@ from reconomics.resolver import resolve_domain
 from reconomics.scanners.httpx import HttpxScanner
 from reconomics.scanners.nmap import NmapScanner
 from reconomics.scanners.subfinder import SubfinderScanner
+from reconomics.scanners.wpscan import WPScanScanner
 from reconomics.targets import classify_target
+from reconomics.technology import has_technology
 from reconomics.web import is_web_service
 
 logger = logging.getLogger(__name__)
@@ -506,7 +508,52 @@ class ScanOrchestrator:
                     existing_relationships.add(
                         relationship_key
                     )
-                    
+
+        # Phase 5: Run specialist WordPress enrichment
+
+        wpscan_scanner = WPScanScanner()
+
+        wordpress_endpoints = [
+            asset
+            for asset in session.assets
+            if asset.asset_type == AssetType.WEB_ENDPOINT
+            and has_technology(asset, "WordPress")
+        ]
+
+        logger.info(
+            "Identified %d WordPress endpoints for WPScan",
+            len(wordpress_endpoints),
+        )
+
+        for endpoint in wordpress_endpoints:
+            if not endpoint.url:
+                continue
+
+            logger.info(
+                "Running WPScan against %s",
+                endpoint.url,
+            )
+
+            try:
+                finding = wpscan_scanner.scan_url(
+                    endpoint.url
+                )
+
+            except Exception as exc:
+                session.errors.append(
+                    ScanError(
+                        stage="wordpress_enrichment",
+                        scanner="wpscan",
+                        target=endpoint.url,
+                        message=str(exc),
+                    )
+                )
+                continue
+
+            session.wordpress_findings.append(
+                finding
+            )
+
         # All current phases are finished
         session.completed_at = datetime.now(
             timezone.utc
