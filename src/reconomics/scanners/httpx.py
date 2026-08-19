@@ -34,6 +34,7 @@ class HttpxScanner(Scanner):
             "-title",
             "-status-code",
             "-tech-detect",
+            "-follow-redirects"
         ]
 
         try:

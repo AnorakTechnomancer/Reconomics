@@ -89,6 +89,19 @@ class WordPressFinding(BaseModel):
     themes: list[str] = Field(default_factory=list)
     vulnerabilities: list[VulnerabilityFinding] = Field(default_factory=list)
 
+class SecurityFinding(BaseModel):
+    title: str
+    severity: str
+    discovered_by: str
+    affected_asset: str
+
+    description: str | None = None
+    matched_at: str | None = None
+    template_id: str | None = None
+
+    tags: list[str] = Field(default_factory=list)
+    references: list[str] = Field(default_factory=list)
+
 class ScanSession(BaseModel):
     target: str
     started_at: datetime = Field(
@@ -100,3 +113,4 @@ class ScanSession(BaseModel):
     scanner_results: list[ScanResult] = Field(default_factory=list)
     errors: list[ScanError] = Field(default_factory=list)
     wordpress_findings: list[WordPressFinding] = Field(default_factory=list)
+    security_findings: list[SecurityFinding] = Field(default_factory=list)

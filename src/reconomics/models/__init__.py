@@ -8,6 +8,7 @@ from .findings import (
     ScanError,
     ScanResult,
     ScanSession,
+    SecurityFinding,
     ServiceFinding,
     VulnerabilityFinding,
     WordPressFinding,
@@ -25,5 +26,6 @@ __all__ = [
     "ScanSession",
     "ServiceFinding",
     "WordPressFinding",
-    "VulnerabilityFinding"
+    "VulnerabilityFinding",
+    "SecurityFinding"
 ]

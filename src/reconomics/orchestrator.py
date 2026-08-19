@@ -12,9 +12,10 @@ from reconomics.models import (
 from reconomics.resolver import resolve_domain
 from reconomics.scanners.httpx import HttpxScanner
 from reconomics.scanners.nmap import NmapScanner
+from reconomics.scanners.nuclei import NucleiScanner
 from reconomics.scanners.subfinder import SubfinderScanner
 from reconomics.scanners.wpscan import WPScanScanner
-from reconomics.targets import classify_target
+from reconomics.targets import TargetType, classify_target
 from reconomics.technology import has_technology
 from reconomics.web import is_web_service
 
@@ -187,6 +188,26 @@ class ScanOrchestrator:
         session = ScanSession(target=target)
 
         target_type = classify_target(target)
+
+        # Add the user-supplied target as the root asset in the graph
+
+        if target_type == TargetType.DOMAIN:
+            session.assets.append(
+                Asset(
+                    value=target,
+                    asset_type=AssetType.DOMAIN,
+                    discovered_by="input",
+                )
+            )
+
+        elif target_type == TargetType.IP:
+            session.assets.append(
+                Asset(
+                    value=target,
+                    asset_type=AssetType.IP,
+                    discovered_by="input",
+                )
+            )
 
         logger.info(
             "Classified target %s as %s",
@@ -552,6 +573,54 @@ class ScanOrchestrator:
 
             session.wordpress_findings.append(
                 finding
+            )
+
+        # Phase 6: Run Nuclei against confirmed web endpoints
+
+        nuclei_scanner = NucleiScanner()
+
+        web_endpoints = [
+            asset
+            for asset in session.assets
+            if asset.asset_type == AssetType.WEB_ENDPOINT
+            and asset.url
+        ]
+
+        logger.info(
+            "Identified %d web endpoints for Nuclei",
+            len(web_endpoints),
+        )
+
+        for endpoint in web_endpoints:
+            logger.info(
+                "Running Nuclei against %s",
+                endpoint.url,
+            )
+
+            try:
+                findings = nuclei_scanner.scan_url(
+                    endpoint.url,
+                )
+
+            except Exception as exc:
+                session.errors.append(
+                    ScanError(
+                        stage="vulnerability_scanning",
+                        scanner="nuclei",
+                        target=endpoint.url,
+                        message=str(exc),
+                    )
+                )
+                continue
+
+            session.security_findings.extend(
+                findings
+            )
+
+            logger.info(
+                "Nuclei found %d findings against %s",
+                len(findings),
+                endpoint.url,
             )
 
         # All current phases are finished
