@@ -422,6 +422,8 @@ class ScanOrchestrator:
             for relationship in session.relationships
         }
 
+        probed_urls: set[str] = set()
+
         for service_asset in service_assets:
             host_ip = service_asset.value.split(":tcp:")[0]
 
@@ -455,6 +457,11 @@ class ScanOrchestrator:
                     "Running httpx against %s",
                     url,
                 )
+
+                if url in probed_urls:
+                    continue
+
+                probed_urls.add(url)
 
                 try:
                     httpx_result = httpx_scanner.scan_url(
