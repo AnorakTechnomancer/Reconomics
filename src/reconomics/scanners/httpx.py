@@ -1,10 +1,37 @@
 import json
 import shutil
 import subprocess
+from pathlib import Path
 
 from reconomics.models import ScanResult
 from reconomics.scanners.base import Scanner
 
+
+def get_system_resolvers() -> list[str]:
+    resolv_conf = Path("/etc/resolv.conf")
+
+    if not resolv_conf.exists():
+        return []
+
+    resolvers = []
+
+    for line in resolv_conf.read_text(
+        encoding="utf-8",
+    ).splitlines():
+        line = line.strip()
+
+        if not line.startswith("nameserver "):
+            continue
+
+        _, address = line.split(
+            maxsplit=1,
+        )
+
+        resolvers.append(
+            address.strip()
+        )
+
+    return resolvers
 
 class HttpxError(RuntimeError):
     pass
@@ -36,6 +63,16 @@ class HttpxScanner(Scanner):
             "-tech-detect",
             "-follow-redirects"
         ]
+
+        resolvers = get_system_resolvers()
+
+        if resolvers:
+            command.extend(
+                [
+                    "-r",
+                    ",".join(resolvers),
+                ]
+            )
 
         try:
             result = subprocess.run(

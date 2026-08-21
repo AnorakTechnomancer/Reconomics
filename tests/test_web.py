@@ -1,5 +1,5 @@
 from reconomics.models import Asset, AssetType
-from reconomics.web import is_web_service
+from reconomics.web import canonicalize_url, is_web_service
 
 
 def test_http_service_is_web_service():
@@ -125,3 +125,37 @@ def test_service_to_url_rejects_non_web_service():
     )
 
     assert orchestrator._service_to_url(asset) is None
+
+def test_canonicalize_url_removes_trailing_root_slash():
+    assert (
+        canonicalize_url("https://example.com/")
+        == "https://example.com"
+    )
+
+
+def test_canonicalize_url_removes_default_https_port():
+    assert (
+        canonicalize_url("https://example.com:443/")
+        == "https://example.com"
+    )
+
+
+def test_canonicalize_url_removes_default_http_port():
+    assert (
+        canonicalize_url("http://example.com:80/")
+        == "http://example.com"
+    )
+
+
+def test_canonicalize_url_preserves_non_default_port():
+    assert (
+        canonicalize_url("https://example.com:8443/")
+        == "https://example.com:8443"
+    )
+
+
+def test_canonicalize_url_normalizes_case():
+    assert (
+        canonicalize_url("HTTPS://Example.COM/")
+        == "https://example.com"
+    )

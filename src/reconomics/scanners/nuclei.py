@@ -3,6 +3,7 @@ import shutil
 import subprocess
 
 from reconomics.models import SecurityFinding
+from reconomics.scanners.httpx import get_system_resolvers
 
 
 class NucleiError(RuntimeError):
@@ -38,7 +39,7 @@ class NucleiScanner:
             finding = SecurityFinding(
                 title=info.get("name", "Unknown finding"),
                 severity=info.get("severity", "unknown"),
-                discovered_by="nuclei",
+                discovered_by=["nuclei"],
                 affected_asset=(
                     data.get("matched-at")
                     or data.get("host")
@@ -72,6 +73,16 @@ class NucleiScanner:
             "-jsonl",
             "-silent",
         ]
+
+        resolvers = get_system_resolvers()
+
+        if resolvers:
+            command.extend(
+                [
+                    "-r",
+                    ",".join(resolvers),
+                ]
+            )
 
         try:
             result = subprocess.run(

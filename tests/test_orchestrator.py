@@ -1,9 +1,15 @@
 from reconomics.models import (
+    Asset,
+    AssetRelationship,
+    AssetType,
     HostFinding,
     RelationshipType,
     ScanResult,
     ScanSession,
+    SecurityFinding,
     ServiceFinding,
+    VulnerabilityFinding,
+    WordPressFinding,
 )
 from reconomics.orchestrator import ScanOrchestrator
 from reconomics.scanners.base import Scanner
@@ -155,4 +161,294 @@ def test_nmap_graph_does_not_create_duplicates():
     orchestrator._add_nmap_assets(session, result)
 
     assert len(session.assets) == 2
+    assert len(session.relationships) == 1
+
+def test_unique_web_endpoints_deduplicates_redirects():
+    orchestrator = ScanOrchestrator()
+
+    session = ScanSession(
+        target="example.com",
+        assets=[
+            Asset(
+                value="https://example.com",
+                asset_type=AssetType.WEB_ENDPOINT,
+                discovered_by="httpx",
+                url="https://example.com",
+                final_url="https://www.example.com",
+            ),
+            Asset(
+                value="https://www.example.com",
+                asset_type=AssetType.WEB_ENDPOINT,
+                discovered_by="httpx",
+                url="https://www.example.com",
+                final_url="https://www.example.com",
+            ),
+        ],
+    )
+
+    endpoints = orchestrator._unique_web_endpoints(
+        session
+    )
+
+    assert len(endpoints) == 1
+
+    target_url = (
+        endpoints[0].final_url
+        or endpoints[0].url
+    )
+
+    assert target_url == "https://www.example.com"
+
+def test_unique_web_endpoints_canonicalizes_urls():
+    orchestrator = ScanOrchestrator()
+
+    session = ScanSession(
+        target="example.com",
+        assets=[
+            Asset(
+                value="https://example.com/",
+                asset_type=AssetType.WEB_ENDPOINT,
+                discovered_by="httpx",
+                url="https://example.com/",
+            ),
+            Asset(
+                value="https://example.com:443",
+                asset_type=AssetType.WEB_ENDPOINT,
+                discovered_by="httpx",
+                url="https://example.com:443",
+            ),
+            Asset(
+                value="https://EXAMPLE.COM",
+                asset_type=AssetType.WEB_ENDPOINT,
+                discovered_by="httpx",
+                url="https://EXAMPLE.COM",
+            ),
+        ],
+    )
+
+    endpoints = orchestrator._unique_web_endpoints(
+        session
+    )
+
+    assert len(endpoints) == 1
+
+
+def test_wpscan_vulnerability_becomes_security_finding():
+    orchestrator = ScanOrchestrator()
+
+    session = ScanSession(
+        target="example.com"
+    )
+
+    finding = WordPressFinding(
+        url="https://example.com",
+        vulnerabilities=[
+            VulnerabilityFinding(
+                title="Example WordPress Vulnerability",
+                severity="high",
+                references=[
+                    "https://example.com/advisory",
+                ],
+            )
+        ],
+    )
+
+    orchestrator._add_wordpress_finding(
+        session,
+        finding,
+        "https://example.com",
+    )
+
+    assert len(session.wordpress_findings) == 1
+    assert len(session.security_findings) == 1
+
+    security_finding = session.security_findings[0]
+
+    assert (
+        security_finding.title
+        == "Example WordPress Vulnerability"
+    )
+    assert security_finding.severity == "high"
+    assert security_finding.discovered_by == ["wpscan"]
+    assert (
+        security_finding.affected_asset
+        == "https://example.com"
+    )
+
+def test_redirect_relationship_is_recorded():
+    session = ScanSession(
+        target="example.com",
+        relationships=[
+            AssetRelationship(
+                source="https://example.com",
+                target="https://www.example.com",
+                relationship_type=RelationshipType.REDIRECTS_TO,
+                discovered_by="httpx",
+            )
+        ],
+    )
+
+    assert len(session.relationships) == 1
+
+    relationship = session.relationships[0]
+
+    assert relationship.source == "https://example.com"
+    assert relationship.target == "https://www.example.com"
+    assert (
+        relationship.relationship_type
+        == RelationshipType.REDIRECTS_TO
+    )
+    assert relationship.discovered_by == "httpx"
+
+def test_security_findings_are_deduplicated():
+    orchestrator = ScanOrchestrator()
+
+    session = ScanSession(
+        target="example.com",
+        security_findings=[
+            SecurityFinding(
+                title="Example Vulnerability",
+                severity="high",
+                discovered_by=["nuclei"],
+                affected_asset="https://example.com/",
+                tags=["cve"],
+                references=[
+                    "https://example.com/one",
+                ],
+            ),
+            SecurityFinding(
+                title="example   vulnerability",
+                severity="high",
+                discovered_by=["wpscan"],
+                affected_asset="https://example.com:443",
+                tags=["wordpress"],
+                references=[
+                    "https://example.com/two",
+                ],
+            ),
+        ],
+    )
+
+    orchestrator._deduplicate_security_findings(
+        session
+    )
+
+    assert len(session.security_findings) == 1
+
+    finding = session.security_findings[0]
+
+    assert "cve" in finding.tags
+    assert "wordpress" in finding.tags
+    assert "https://example.com/one" in finding.references
+    assert "https://example.com/two" in finding.references
+
+    def test_duplicate_security_findings_merge_sources():
+        orchestrator = ScanOrchestrator()
+
+        session = ScanSession(
+            target="example.com",
+            security_findings=[
+                SecurityFinding(
+                    title="Example Vulnerability",
+                    severity="high",
+                    discovered_by=["nuclei"],
+                    affected_asset="https://example.com",
+                    tags=["cve"],
+                    references=[
+                        "https://example.com/nuclei",
+                    ],
+                ),
+                SecurityFinding(
+                    title="example   vulnerability",
+                    severity="high",
+                    discovered_by=["wpscan"],
+                    affected_asset="https://example.com/",
+                    tags=["wordpress"],
+                    references=[
+                        "https://example.com/wpscan",
+                    ],
+                ),
+            ],
+        )
+
+        orchestrator._deduplicate_security_findings(
+            session
+        )
+
+        assert len(session.security_findings) == 1
+
+        finding = session.security_findings[0]
+
+        assert finding.discovered_by == [
+            "nuclei",
+            "wpscan",
+        ]
+
+        assert set(finding.tags) == {
+            "cve",
+            "wordpress",
+        }
+
+        assert set(finding.references) == {
+            "https://example.com/nuclei",
+            "https://example.com/wpscan",
+        }
+
+def test_security_finding_creates_graph_relationship():
+    orchestrator = ScanOrchestrator()
+
+    session = ScanSession(
+        target="example.com",
+        security_findings=[
+            SecurityFinding(
+                title="Example Vulnerability",
+                severity="high",
+                discovered_by=[
+                    "nuclei",
+                    "wpscan",
+                ],
+                affected_asset="https://example.com/",
+            )
+        ],
+    )
+
+    orchestrator._add_finding_relationships(
+        session
+    )
+
+    assert len(session.relationships) == 1
+
+    relationship = session.relationships[0]
+
+    assert relationship.source == "https://example.com"
+    assert relationship.target == "Example Vulnerability"
+    assert (
+        relationship.relationship_type
+        == RelationshipType.HAS_FINDING
+    )
+    assert relationship.discovered_by == "nuclei, wpscan"
+
+def test_finding_relationships_do_not_duplicate():
+    orchestrator = ScanOrchestrator()
+
+    session = ScanSession(
+        target="example.com",
+        security_findings=[
+            SecurityFinding(
+                title="Example Vulnerability",
+                severity="high",
+                discovered_by=["nuclei"],
+                affected_asset="https://example.com",
+            )
+        ],
+    )
+
+    orchestrator._add_finding_relationships(
+        session
+    )
+
+    orchestrator._add_finding_relationships(
+        session
+    )
+
     assert len(session.relationships) == 1

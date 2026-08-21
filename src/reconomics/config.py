@@ -26,7 +26,18 @@ def get_api_key(
 
     value = provider_config.get(key_name)
 
-    if not value:
+    if value is None:
         return None
 
-    return str(value)
+    value = str(value).strip()
+
+    placeholders = {
+        "YOUR_WPSCAN_TOKEN",
+        "YOUR_API_KEY",
+        "CHANGE_ME",
+    }
+
+    if not value or value in placeholders:
+        return None
+
+    return value

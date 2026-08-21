@@ -35,6 +35,7 @@ class RelationshipType(str, Enum):
     SERVES = "serves"
     USES = "uses"
     HAS_FINDING = "has_finding"
+    REDIRECTS_TO = "redirects_to"
 
 class AssetRelationship(BaseModel):
     source: str
@@ -56,6 +57,7 @@ class Asset(BaseModel):
     version: str | None = None
 
     url: str | None = None
+    final_url: str | None = None
     status_code: int | None = None
     title: str | None = None
     technologies: list[str] = Field(default_factory=list)
@@ -92,7 +94,7 @@ class WordPressFinding(BaseModel):
 class SecurityFinding(BaseModel):
     title: str
     severity: str
-    discovered_by: str
+    discovered_by: list[str] = Field(default_factory=list)
     affected_asset: str
 
     description: str | None = None

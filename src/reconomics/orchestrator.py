@@ -8,6 +8,8 @@ from reconomics.models import (
     RelationshipType,
     ScanError,
     ScanSession,
+    SecurityFinding,
+    WordPressFinding,
 )
 from reconomics.resolver import resolve_domain
 from reconomics.scanners.httpx import HttpxScanner
@@ -17,7 +19,7 @@ from reconomics.scanners.subfinder import SubfinderScanner
 from reconomics.scanners.wpscan import WPScanScanner
 from reconomics.targets import TargetType, classify_target
 from reconomics.technology import has_technology
-from reconomics.web import is_web_service
+from reconomics.web import canonicalize_url, is_web_service
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +186,186 @@ class ScanOrchestrator:
 
         return f"{scheme}://{hostname}:{service_asset.port}"
 
+    def _unique_web_endpoints(
+        self,
+        session: ScanSession,
+    ) -> list[Asset]:
+        unique: dict[str, Asset] = {}
+
+        for asset in session.assets:
+            if asset.asset_type != AssetType.WEB_ENDPOINT:
+                continue
+
+            target_url = canonicalize_url(
+                asset.final_url
+                or asset.url
+                or asset.value
+            )
+
+            if target_url not in unique:
+                unique[target_url] = asset
+
+        return list(unique.values())
+
+    def _add_wordpress_finding(
+        self,
+        session: ScanSession,
+        finding: WordPressFinding,
+        target_url: str,
+    ) -> None:
+        session.wordpress_findings.append(
+            finding
+        )
+
+        for vulnerability in finding.vulnerabilities:
+            session.security_findings.append(
+                SecurityFinding(
+                    title=vulnerability.title,
+                    severity=(
+                        vulnerability.severity
+                        or "unknown"
+                    ),
+                    discovered_by=["wpscan"],
+                    affected_asset=target_url,
+                    references=vulnerability.references,
+                )
+            )
+
+    def _deduplicate_security_findings(
+        self,
+        session: ScanSession,
+    ) -> None:
+        unique: dict[
+            tuple[str, str],
+            SecurityFinding,
+        ] = {}
+
+        for finding in session.security_findings:
+            asset = canonicalize_url(
+                finding.affected_asset
+            )
+
+            title = " ".join(
+                finding.title.lower().split()
+            )
+
+            key = (
+                asset,
+                title,
+            )
+
+            existing = unique.get(key)
+
+            if existing is None:
+                unique[key] = finding
+                continue
+
+            for source in finding.discovered_by:
+                if source not in existing.discovered_by:
+                    existing.discovered_by.append(
+                        source
+                    )
+
+            for reference in finding.references:
+                if reference not in existing.references:
+                    existing.references.append(
+                        reference
+                    )
+
+            for tag in finding.tags:
+                if tag not in existing.tags:
+                    existing.tags.append(
+                        tag
+                    )
+
+        session.security_findings = list(
+            unique.values()
+        )
+
+    def _deduplicate_security_findings(
+        self,
+        session: ScanSession,
+    ) -> None:
+        unique: dict[tuple[str, str], SecurityFinding] = {}
+
+        for finding in session.security_findings:
+            asset = canonicalize_url(
+                finding.affected_asset
+            )
+
+            title = " ".join(
+                finding.title.lower().split()
+            )
+
+            key = (
+                asset,
+                title,
+            )
+
+            existing = unique.get(key)
+
+            if existing is None:
+                unique[key] = finding
+                continue
+
+            for reference in finding.references:
+                if reference not in existing.references:
+                    existing.references.append(
+                        reference
+                    )
+
+            for tag in finding.tags:
+                if tag not in existing.tags:
+                    existing.tags.append(
+                        tag
+                    )
+
+        session.security_findings = list(
+            unique.values()
+        )
+
+    def _add_finding_relationships(
+        self,
+        session: ScanSession,
+    ) -> None:
+        existing_relationships = {
+            (
+                relationship.source,
+                relationship.target,
+                relationship.relationship_type,
+            )
+            for relationship in session.relationships
+        }
+
+        for finding in session.security_findings:
+            source = canonicalize_url(
+                finding.affected_asset
+            )
+
+            relationship_key = (
+                source,
+                finding.title,
+                RelationshipType.HAS_FINDING,
+            )
+
+            if relationship_key in existing_relationships:
+                continue
+
+            session.relationships.append(
+                AssetRelationship(
+                    source=source,
+                    target=finding.title,
+                    relationship_type=RelationshipType.HAS_FINDING,
+                    discovered_by=", ".join(
+                        finding.discovered_by
+                    ),
+                )
+            )
+
+            existing_relationships.add(
+                relationship_key
+            )
+
     def run(self, target: str) -> ScanSession:
         session = ScanSession(target=target)
 
@@ -261,15 +443,7 @@ class ScanOrchestrator:
             if result.scanner == "nmap":
                 self._add_nmap_assets(session, result)
 
-            if result.scanner == "subfinder":
-                for domain in result.domains:
-                    session.assets.append(
-                        Asset(
-                            value=domain.name,
-                            asset_type=AssetType.DOMAIN,
-                            discovered_by="subfinder",
-                        )
-                    )
+
             # Turn Subfinder discoveries into domain assets
             if result.scanner == "subfinder":
                 existing_domains = {
@@ -453,15 +627,17 @@ class ScanOrchestrator:
                     urls.append(url)
 
             for url in urls:
-                logger.info(
-                    "Running httpx against %s",
-                    url,
-                )
+                url = canonicalize_url(url)
 
                 if url in probed_urls:
                     continue
 
                 probed_urls.add(url)
+
+                logger.info(
+                    "Running httpx against %s",
+                    url,
+                )
 
                 try:
                     httpx_result = httpx_scanner.scan_url(
@@ -482,10 +658,36 @@ class ScanOrchestrator:
                 if not httpx_result:
                     continue
 
-                endpoint_url = (
+                endpoint_url = canonicalize_url(
                     httpx_result.get("url")
                     or url
                 )
+
+                final_url = canonicalize_url(
+                    httpx_result.get("final_url")
+                    or endpoint_url
+                )
+
+                if final_url != endpoint_url:
+                    redirect_key = (
+                        endpoint_url,
+                        final_url,
+                        RelationshipType.REDIRECTS_TO,
+                    )
+
+                    if redirect_key not in existing_relationships:
+                        session.relationships.append(
+                            AssetRelationship(
+                                source=endpoint_url,
+                                target=final_url,
+                                relationship_type=RelationshipType.REDIRECTS_TO,
+                                discovered_by="httpx",
+                            )
+                        )
+
+                        existing_relationships.add(
+                            redirect_key
+                        )
 
                 endpoint_key = (
                     AssetType.WEB_ENDPOINT,
@@ -499,6 +701,7 @@ class ScanOrchestrator:
                             asset_type=AssetType.WEB_ENDPOINT,
                             discovered_by="httpx",
                             url=endpoint_url,
+                            final_url=final_url,
                             status_code=httpx_result.get(
                                 "status_code"
                             ),
@@ -541,11 +744,14 @@ class ScanOrchestrator:
 
         wpscan_scanner = WPScanScanner()
 
+        unique_web_endpoints = self._unique_web_endpoints(
+            session
+        )
+
         wordpress_endpoints = [
             asset
-            for asset in session.assets
-            if asset.asset_type == AssetType.WEB_ENDPOINT
-            and has_technology(asset, "WordPress")
+            for asset in unique_web_endpoints
+            if has_technology(asset, "WordPress")
         ]
 
         logger.info(
@@ -554,17 +760,22 @@ class ScanOrchestrator:
         )
 
         for endpoint in wordpress_endpoints:
-            if not endpoint.url:
+            target_url = (
+                endpoint.final_url
+                or endpoint.url
+            )
+
+            if not target_url:
                 continue
 
             logger.info(
                 "Running WPScan against %s",
-                endpoint.url,
+                target_url,
             )
 
             try:
                 finding = wpscan_scanner.scan_url(
-                    endpoint.url
+                    target_url
                 )
 
             except Exception as exc:
@@ -572,26 +783,24 @@ class ScanOrchestrator:
                     ScanError(
                         stage="wordpress_enrichment",
                         scanner="wpscan",
-                        target=endpoint.url,
+                        target=target_url,
                         message=str(exc),
                     )
                 )
                 continue
 
-            session.wordpress_findings.append(
-                finding
+            self._add_wordpress_finding(
+                session,
+                finding,
+                target_url,
             )
-
         # Phase 6: Run Nuclei against confirmed web endpoints
 
         nuclei_scanner = NucleiScanner()
 
-        web_endpoints = [
-            asset
-            for asset in session.assets
-            if asset.asset_type == AssetType.WEB_ENDPOINT
-            and asset.url
-        ]
+        web_endpoints = self._unique_web_endpoints(
+            session
+        )
 
         logger.info(
             "Identified %d web endpoints for Nuclei",
@@ -599,14 +808,26 @@ class ScanOrchestrator:
         )
 
         for endpoint in web_endpoints:
+            target_url = (
+                endpoint.final_url
+                or endpoint.url
+            )
+
+            if not target_url:
+                continue
+
+            target_url = canonicalize_url(
+                target_url
+            )
+
             logger.info(
                 "Running Nuclei against %s",
-                endpoint.url,
+                target_url,
             )
 
             try:
                 findings = nuclei_scanner.scan_url(
-                    endpoint.url,
+                    target_url,
                 )
 
             except Exception as exc:
@@ -614,7 +835,7 @@ class ScanOrchestrator:
                     ScanError(
                         stage="vulnerability_scanning",
                         scanner="nuclei",
-                        target=endpoint.url,
+                        target=target_url,
                         message=str(exc),
                     )
                 )
@@ -627,8 +848,16 @@ class ScanOrchestrator:
             logger.info(
                 "Nuclei found %d findings against %s",
                 len(findings),
-                endpoint.url,
+                target_url,
             )
+
+        self._deduplicate_security_findings(
+            session
+        )
+
+        self._add_finding_relationships(
+            session
+        )
 
         # All current phases are finished
         session.completed_at = datetime.now(

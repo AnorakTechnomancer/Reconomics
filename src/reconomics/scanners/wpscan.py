@@ -1,4 +1,5 @@
 import json
+import logging
 import shutil
 import subprocess
 import tempfile
@@ -6,6 +7,7 @@ import tempfile
 from reconomics.config import get_api_key
 from reconomics.models import VulnerabilityFinding, WordPressFinding
 
+logger = logging.getLogger(__name__)
 
 class WPScanError(RuntimeError):
     pass
@@ -19,10 +21,18 @@ class WPScanScanner:
     ) -> None:
         self.executable = executable
         self.timeout = timeout
-        self.api_token = get_api_key(
+        token = get_api_key(
             "wpscan",
             "api_token",
         )
+
+        self.api_token = (
+            token.strip()
+            if token and token.strip()
+            else None
+        )
+
+
 
     def parse_output(
         self,
@@ -111,6 +121,11 @@ class WPScanScanner:
         ) as output_file:
             output_path = output_file.name
 
+        logger.info(
+            "WPScan API token configured: %s",
+            bool(self.api_token),
+)
+
         command = [
             self.executable,
             "--url",
@@ -120,6 +135,7 @@ class WPScanScanner:
             "--output",
             output_path,
             "--no-banner",
+            "--random-user-agent",
         ]
 
         if self.api_token:
@@ -143,13 +159,32 @@ class WPScanScanner:
                 f"WPScan timed out after {self.timeout} seconds"
             ) from exc
 
+        data = {}
+
+        try:
+            with open(
+                output_path,
+                encoding="utf-8",
+            ) as file:
+                data = json.load(file)
+
+        except (OSError, json.JSONDecodeError):
+            pass
+
         if result.returncode != 0:
-            raise WPScanError(
-                result.stderr.strip() or "WPScan failed"
+            error_message = (
+                data.get("scan_aborted")
+                or result.stderr.strip()
+                or result.stdout.strip()
+                or (
+                    "WPScan exited with code "
+                    f"{result.returncode}"
+                )
             )
 
-        with open(output_path, encoding="utf-8") as file:
-            data = json.load(file)
+            raise WPScanError(
+                error_message
+            )
 
         return self.parse_output(
             data,

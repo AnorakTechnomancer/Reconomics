@@ -35,6 +35,22 @@ def render_console(session: ScanSession) -> None:
         if asset.asset_type == AssetType.WEB_ENDPOINT
     )
 
+    finding_count = len(
+        session.security_findings
+    )
+
+    critical_count = sum(
+        1
+        for finding in session.security_findings
+        if finding.severity.lower() == "critical"
+    )
+
+    high_count = sum(
+        1
+        for finding in session.security_findings
+        if finding.severity.lower() == "high"
+    )
+
     summary = Table(title="Scan Summary")
     summary.add_column("Metric")
     summary.add_column("Count", justify="right")
@@ -42,7 +58,12 @@ def render_console(session: ScanSession) -> None:
     summary.add_row("Domains", str(domain_count))
     summary.add_row("Unique IPs", str(ip_count))
     summary.add_row("Services", str(service_count))
+    summary.add_row("Web Endpoints", str(web_endpoint_count))
+    summary.add_row("Findings", str(finding_count))
+    summary.add_row("Critical", str(critical_count))
+    summary.add_row("High", str(high_count))
     summary.add_row("Errors", str(len(session.errors)))
+
 
     console.print(summary)
 
@@ -51,8 +72,6 @@ def render_console(session: ScanSession) -> None:
     services.add_column("Port")
     services.add_column("Service")
     services.add_column("Product")
-
-    summary.add_row("Web Endpoints", str(web_endpoint_count))
 
     for result in session.scanner_results:
         for host in result.hosts:
@@ -140,6 +159,41 @@ def render_console(session: ScanSession) -> None:
             )
 
         console.print(vulnerabilities)
+
+    severity_order = {
+        "critical": 0,
+        "high": 1,
+        "medium": 2,
+        "low": 3,
+        "info": 4,
+        "unknown": 5,
+    }
+
+    if session.security_findings:
+        findings = Table(title="Security Findings")
+        findings.add_column("Severity")
+        findings.add_column("Finding")
+        findings.add_column("Asset")
+        findings.add_column("Scanner")
+        findings.add_column("Template")
+
+        for finding in sorted(
+            session.security_findings,
+            key=lambda item: severity_order.get(
+                item.severity.lower(),
+                5,
+            ),
+        ):
+
+            findings.add_row(
+                finding.severity.upper(),
+                finding.title,
+                finding.affected_asset,
+                ", ".join(finding.discovered_by),
+                finding.template_id or "-",
+            )
+
+        console.print(findings)
 
     if session.errors:
         errors = Table(title="Errors")

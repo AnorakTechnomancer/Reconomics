@@ -41,7 +41,7 @@ def test_nuclei_parser_extracts_findings():
 
     assert first.title == "Example Vulnerability"
     assert first.severity == "high"
-    assert first.discovered_by == "nuclei"
+    assert first.discovered_by == ["nuclei"]
     assert first.affected_asset == "https://example.com/test"
     assert first.template_id == "example-cve"
     assert first.description == "Example description"
