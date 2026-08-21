@@ -1,7 +1,11 @@
 from rich.console import Console
 from rich.table import Table
 
-from reconomics.models import AssetType, ScanSession
+from reconomics.models import (
+    AssetType,
+    RelationshipType,
+    ScanSession,
+)
 
 console = Console()
 
@@ -10,6 +14,16 @@ def render_console(session: ScanSession) -> None:
     console.rule("[bold]Reconomics")
 
     console.print(f"[bold]Target:[/bold] {session.target}")
+
+    target_type = (
+        "IP"
+        if any(
+            asset.asset_type == AssetType.IP
+            and asset.value == session.target
+            for asset in session.assets
+        )
+        else "Domain"
+    )
 
     domain_count = sum(
         1
@@ -35,6 +49,15 @@ def render_console(session: ScanSession) -> None:
         if asset.asset_type == AssetType.WEB_ENDPOINT
     )
 
+    redirect_count = sum(
+        1
+        for relationship in session.relationships
+        if (
+            relationship.relationship_type
+            == RelationshipType.REDIRECTS_TO
+        )
+    )
+
     finding_count = len(
         session.security_findings
     )
@@ -51,17 +74,69 @@ def render_console(session: ScanSession) -> None:
         if finding.severity.lower() == "high"
     )
 
+    medium_count = sum(
+        1
+        for finding in session.security_findings
+        if finding.severity.lower() == "medium"
+    )
+
+    low_count = sum(
+        1
+        for finding in session.security_findings
+        if finding.severity.lower() == "low"
+    )
+
+    info_count = sum(
+        1
+        for finding in session.security_findings
+        if finding.severity.lower() == "info"
+    )
+
+    duration = None
+
+    if session.completed_at is not None:
+        duration = (
+            session.completed_at
+            - session.started_at
+        ).total_seconds()
+
     summary = Table(title="Scan Summary")
     summary.add_column("Metric")
     summary.add_column("Count", justify="right")
 
+    summary.add_row("Target Type", target_type)
     summary.add_row("Domains", str(domain_count))
     summary.add_row("Unique IPs", str(ip_count))
     summary.add_row("Services", str(service_count))
     summary.add_row("Web Endpoints", str(web_endpoint_count))
+    summary.add_row("Redirects", str(redirect_count))
     summary.add_row("Findings", str(finding_count))
+
+    if duration is not None:
+        summary.add_row(
+            "Duration",
+            f"{duration:.1f}s",
+        )
+    
     summary.add_row("Critical", str(critical_count))
     summary.add_row("High", str(high_count))
+    if medium_count:
+        summary.add_row(
+            "Medium",
+            str(medium_count),
+        )
+
+    if low_count:
+        summary.add_row(
+            "Low",
+            str(low_count),
+        )
+
+    if info_count:
+        summary.add_row(
+            "Info",
+            str(info_count),
+        )
     summary.add_row("Errors", str(len(session.errors)))
 
 
@@ -115,6 +190,31 @@ def render_console(session: ScanSession) -> None:
             )
 
         console.print(endpoints)
+
+    redirects = [
+        relationship
+        for relationship in session.relationships
+        if (
+            relationship.relationship_type
+            == RelationshipType.REDIRECTS_TO
+        )
+    ]
+
+    if redirects:
+        redirect_table = Table(
+            title="Redirects"
+        )
+
+        redirect_table.add_column("Source")
+        redirect_table.add_column("Destination")
+
+        for relationship in redirects:
+            redirect_table.add_row(
+                relationship.source,
+                relationship.target,
+            )
+
+        console.print(redirect_table)
 
     if session.wordpress_findings:
         wordpress = Table(title="WordPress Findings")
@@ -207,5 +307,7 @@ def render_console(session: ScanSession) -> None:
                 error.target,
                 error.message,
             )
+
+
 
         console.print(errors)
